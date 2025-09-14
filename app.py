@@ -30,7 +30,6 @@ def load_models_and_processors():
     try:
         print("Starting model loading process...")
         print(f"CWD: {os.getcwd()}, files: {os.listdir('.')}")
-        # List expected files under models/
         expected = [
             'best_regression_model_linear.pkl',
             'best_classification_model_logistic.pkl',
@@ -44,19 +43,15 @@ def load_models_and_processors():
             print(f"Missing model files in {MODEL_DIR}/: {missing}")
             return False
 
-        # Load regression and classification models
         models['regression'] = joblib.load(os.path.join(MODEL_DIR, 'best_regression_model_linear.pkl'))
         models['classification'] = joblib.load(os.path.join(MODEL_DIR, 'best_classification_model_logistic.pkl'))
 
-        # Load scalers
         scalers['regression'] = joblib.load(os.path.join(MODEL_DIR, 'regression_scaler.pkl'))
         scalers['classification'] = joblib.load(os.path.join(MODEL_DIR, 'classification_scaler.pkl'))
 
-        # Load encoders
         encoders['regression'] = joblib.load(os.path.join(MODEL_DIR, 'regression_encoders.pkl'))
         encoders['classification'] = joblib.load(os.path.join(MODEL_DIR, 'classification_encoders.pkl'))
 
-        # Load feature names (JSON in project root)
         with open('feature_names.json', 'r') as f:
             feature_names = json.load(f)
 
@@ -69,19 +64,16 @@ def load_models_and_processors():
         return False
 
 def preprocess_input_data(data, task_type='regression'):
-    """Preprocess input data same way as training"""
+    """Preprocess input data same way as training data"""
     try:
-        # Validate that loaders ran
         if not models:
             raise Exception("Models not loaded")
 
         if task_type not in encoders or task_type not in scalers or f"{task_type}_features" not in feature_names:
             raise Exception(f"Missing encoders/scalers/features for task '{task_type}'")
 
-        # Convert to DataFrame
         df = pd.DataFrame([data])
 
-        # Encode categorical features
         for feat in ['Vegetation_Type', 'Soil_Type', 'Country']:
             if feat in df.columns and feat in encoders[task_type]:
                 encoder = encoders[task_type][feat]
@@ -89,15 +81,14 @@ def preprocess_input_data(data, task_type='regression'):
                     lambda x: encoder.transform([str(x)])[0] if str(x) in encoder.classes_ else 0
                 )
 
-        # Boolean to int
         if 'Protected_Area_Status' in df.columns:
             df['Protected_Area_Status'] = df['Protected_Area_Status'].astype(int)
 
-        # Select and scale features
         cols = feature_names[f"{task_type}_features"]
-        missing = [c for c in cols if c not in df.columns]
-        if missing:
-            raise Exception(f"Missing input features: {missing}")
+        missing_feats = [c for c in cols if c not in df.columns]
+        if missing_feats:
+            raise Exception(f"Missing input features: {missing_feats}")
+
         features = df[cols]
         return scalers[task_type].transform(features)
 
@@ -119,7 +110,6 @@ def predict():
             return jsonify({'error': 'Models not loaded', 'success': False}), 500
 
         input_data = request.json or {}
-        # Required inputs
         required = [
             'Latitude','Longitude','Vegetation_Type','Biodiversity_Index',
             'Protected_Area_Status','Elevation_m','Slope_Degree','Soil_Type',
@@ -130,12 +120,11 @@ def predict():
         if missing:
             return jsonify({'error': f'Missing fields: {missing}', 'success': False}), 400
 
-        # Defaults
         defaults = {
             'Country':'USA','Flood_Risk_Index':0.3,'Drought_Risk_Index':0.3,
-            'Temperature_C': input_data.get('Average_Temperature_C',20.0),
+            'Temperature_C':input_data.get('Average_Temperature_C',20.0),
             'Annual_Rainfall_mm':1000.0,'Soil_Erosion_Risk':0.2,
-            'Current_Tourist_Count': input_data['Tourist_Capacity_Limit']*0.6,
+            'Current_Tourist_Count':input_data['Tourist_Capacity_Limit']*0.6,
             'Human_Activity_Index':0.4,'Conservation_Investment_USD':100000.0,
             'Climate_Risk_Score':0.4
         }
@@ -146,11 +135,11 @@ def predict():
         cls_X = preprocess_input_data(input_data, 'classification')
 
         score = models['regression'].predict(reg_X)[0]
-        cls = models['classification'].predict(cls_X)[0]
+        cls_pred = models['classification'].predict(cls_X)[0]
         proba = models['classification'].predict_proba(cls_X)[0]
 
         cats = ['Low','Medium','High']
-        flood_cat = cats[cls] if cls < len(cats) else 'Unknown'
+        flood_cat = cats[cls_pred] if cls_pred < len(cats) else 'Unknown'
         probs = {cats[i]: float(proba[i]) for i in range(len(cats))}
 
         result = {
@@ -158,7 +147,7 @@ def predict():
             'climate_risk_score': float(score),
             'flood_risk_category': flood_cat,
             'risk_probabilities': probs,
-            'risk_level': 'Low' if score<0.33 else 'Medium' if score<0.67 else 'High'
+            'risk_level': 'Low' if score < 0.33 else 'Medium' if score < 0.67 else 'High'
         }
         return jsonify(result)
 
@@ -194,5 +183,5 @@ if __name__ == '__main__':
     if not loaded:
         print("WARNING: Models/processors failed to load.")
     port = int(os.environ.get('PORT', 10000))
-    debug = os.environ.get('FLASK_ENV')=='development'
+    debug = os.environ.get('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
