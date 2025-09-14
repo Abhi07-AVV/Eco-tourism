@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eco-Tourism Climate Risk Prediction</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1><i class="fas fa-leaf"></i> Eco-Tourism Climate Risk Prediction</h1>
+            <p>Assess climate vulnerability and flood risk for eco-tourism sites</p>
+        </header>
+
+        <!-- Main Content -->
+        <main>
+            <!-- Input Form -->
+            <section class="form-section">
+                <h2><i class="fas fa-clipboard-list"></i> Site Information</h2>
+                <form id="predictionForm">
+                    <!-- Geospatial Information -->
+                    <div class="form-group-header">
+                        <h3><i class="fas fa-globe"></i> Geospatial Information</h3>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="latitude">
+                                Latitude 
+                                <i class="fas fa-info-circle tooltip" data-tooltip="Geographic latitude (-90 to 90 degrees)"></i>
+                            </label>
+                            <input type="number" id="latitude" name="Latitude" min="-90" max="90" step="0.000001" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="longitude">
+                                Longitude
+                                <i class="fas fa-info-circle tooltip" data-tooltip="Geographic longitude (-180 to 180 degrees)"></i>
+                            </label>
+                            <input type="number" id="longitude" name="Longitude" min="-180" max="180" step="0.000001" required>
+                        </div>
+                    </div>
+
+                    <!-- Environmental Factors -->
+                    <div class="form-group-header">
+                        <h3><i class="fas fa-tree"></i> Environmental Factors</h3>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="vegetation_type">
+                                Vegetation Type
+                                <i class="fas fa-info-circle tooltip" data-tooltip="Primary vegetation type of the area"></i>
+                            </label>
+                            <select id="vegetation_type" name="Vegetation_Type" required>
+                                <option value="">Select vegetation type</option>
+                                <option value="Forest">Forest</option>
+                                <option value="Mountain">Mountain</option>
+                                <option value="Wetland">Wetland</option>
+                                <option value="Grassland">Grassland</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="biodiversity_index">
+                                Biodiversity Index
+                                <i class="fas fa-info-circle tooltip" data-tooltip="Biodiversity richness (0.0 = low, 1.0 = high)"></i>
+                            </label>
+                            <input type="range" id="biodiversity_index" name="Biodiversity_Index" min="0" max="1" step="0.01" value="0.5">
+                            <span class="range-value" id="biodiversity_value">0.50</span>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="protected_area">
+                                Protected Area Status
+                                <i class="fas fa-info-circle tooltip" data-tooltip="Is this site in a protected area?"></i>
+                            </label>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="Protected_Area_Status" value="true" required> Yes
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="Protected_Area_Status" value="false" required> No
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="elevation">
+                                Elevation (meters)
+                                <i class="fas fa-info-circle tooltip" data-tooltip="Height above sea level in meters"></i>
+                            </label>
+                            <input type="number" id="elevation" name="Elevation_m" min="0" max="9000" step="1" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="slope_degree">
+                                Slope (degrees)
+                                <i class="fas fa-info-circle tooltip" data-tooltip="Terrain slope in degrees (0-90)"></i>
+                            </label>
+                            <input type="range" id="slope_degree" name="Slope_Degree" min="0" max="90" step="1" value="15">
+                            <span class="range-value" id="slope_value">15°</span>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="soil_type">
+                                Soil Type
+                                <i class="fas fa-info-circle tooltip" data-tooltip="Primary soil composition"></i>
+                            </label>
+                            <select id="soil_type" name="Soil_Type" required>
+                                <option value="">Select soil type</option>
+                                <option value="Sandy">Sandy</option>
+                                <option value="Clay">Clay</option>
+                                <option value="Loam">Loam</option>
+                                <option value="Rocky">Rocky</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="air_quality">
+                                Air Quality Index
+                                <i class="fas fa-info-circle tooltip" data-tooltip="Air quality index (0-500, lower is better)"></i>
+                            </label>
+                            <input type="number" id="air_quality" name="Air_Quality_Index" min="0" max="500" step="1" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="temperature">
+                                Average Temperature (°C)
+                                <i class="fas fa-info-circle tooltip" data-tooltip="Average annual temperature in Celsius"></i>
+                            </label>
+                            <input type="number" id="temperature" name="Average_Temperature_C" min="-50" max="50" step="0.1" required>
+                        </div>
+                    </div>
+
+                    <!-- Tourism Information -->
+                    <div class="form-group-header">
+                        <h3><i class="fas fa-camera"></i> Tourism Information</h3>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tourist_attractions">
+                                Number of Tourist Attractions
+                                <i class="fas fa-info-circle tooltip" data-tooltip="Count of major tourist attractions in the area"></i>
+                            </label>
+                            <input type="number" id="tourist_attractions" name="Tourist_Attractions" min="0" max="20" step="1" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="accessibility">
+                                Accessibility Score
+                                <i class="fas fa-info-circle tooltip" data-tooltip="How easily accessible is the site (1-10 scale)"></i>
+                            </label>
+                            <input type="range" id="accessibility" name="Accessibility_Score" min="1" max="10" step="1" value="5">
+                            <span class="range-value" id="accessibility_value">5</span>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tourist_capacity">
+                                Tourist Capacity Limit
+                                <i class="fas fa-info-circle tooltip" data-tooltip="Maximum number of tourists the site can handle"></i>
+                            </label>
+                            <input type="number" id="tourist_capacity" name="Tourist_Capacity_Limit" min="1" max="10000" step="1" required>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="submit-section">
+                        <button type="submit" id="predictBtn">
+                            <i class="fas fa-chart-line"></i> Predict Climate Risk
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <h2><i class="fas fa-chart-bar"></i> Prediction Results</h2>
+                
+                <div class="results-grid">
+                    <!-- Climate Risk Score -->
+                    <div class="result-card">
+                        <h3>Climate Risk Score</h3>
+                        <div class="score-display">
+                            <div class="score-number" id="climateScore">-</div>
+                            <div class="score-gauge">
+                                <div class="gauge-bar">
+                                    <div class="gauge-fill" id="climateFill"></div>
+                                </div>
+                                <div class="gauge-labels">
+                                    <span>Low</span>
+                                    <span>Medium</span>
+                                    <span>High</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="risk-level" id="climateRiskLevel">-</div>
+                    </div>
+                    
+                    <!-- Flood Risk -->
+                    <div class="result-card">
+                        <h3>Flood Risk Assessment</h3>
+                        <div class="flood-risk-display">
+                            <div class="flood-category" id="floodCategory">-</div>
+                            <div class="probability-bars" id="probabilityBars">
+                                <!-- Probability bars will be generated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Loading Section -->
+            <section class="loading-section" id="loadingSection" style="display: none;">
+                <div class="loading-spinner">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </div>
+                <p>Analyzing climate risk data...</p>
+            </section>
+
+            <!-- Error Section -->
+            <section class="error-section" id="errorSection" style="display: none;">
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p id="errorMessage">An error occurred while processing your request.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
