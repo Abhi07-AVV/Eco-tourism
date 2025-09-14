@@ -1,6 +1,6 @@
 """
 Flask Backend API for Eco-Tourism Climate Risk Prediction
-Optimized for Render.com deployment with enhanced error handling
+Optimized for Render.com deployment with models/ directory support
 """
 
 import os
@@ -11,333 +11,188 @@ import pandas as pd
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
 
+# Directory where all model and processor files live
+MODEL_DIR = 'models'
+
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
-# Global variables to store loaded models and processors
+# Global storage for loaded models and processors
 models = {}
 scalers = {}
 encoders = {}
 feature_names = {}
 
 def load_models_and_processors():
-    """Load all trained models and data processors with enhanced error handling"""
+    """Load all trained models and data processors from models/ directory"""
     global models, scalers, encoders, feature_names
-    
+
     try:
         print("Starting model loading process...")
-        print(f"Current working directory: {os.getcwd()}")
-        print(f"Files in directory: {os.listdir('.')}")
-        
-        # Check if model files exist
-        model_files = [
+        print(f"CWD: {os.getcwd()}, files: {os.listdir('.')}")
+        # List expected files under models/
+        expected = [
             'best_regression_model_linear.pkl',
             'best_classification_model_logistic.pkl',
             'regression_scaler.pkl',
             'classification_scaler.pkl',
             'regression_encoders.pkl',
-            'classification_encoders.pkl',
-            'feature_names.json'
+            'classification_encoders.pkl'
         ]
-        
-        missing_files = [f for f in model_files if not os.path.exists(f)]
-        if missing_files:
-            print(f"Missing model files: {missing_files}")
-            print("Please ensure all .pkl files are present in the repository.")
+        missing = [f for f in expected if not os.path.exists(os.path.join(MODEL_DIR, f))]
+        if missing:
+            print(f"Missing model files in {MODEL_DIR}/: {missing}")
             return False
-        
-        print("All required files found. Loading models...")
-        
-        # Load models
-        models['regression'] = joblib.load('best_regression_model_linear.pkl')
-        models['classification'] = joblib.load('best_classification_model_logistic.pkl')
-        print("✅ Models loaded successfully")
-        
+
+        # Load regression and classification models
+        models['regression'] = joblib.load(os.path.join(MODEL_DIR, 'best_regression_model_linear.pkl'))
+        models['classification'] = joblib.load(os.path.join(MODEL_DIR, 'best_classification_model_logistic.pkl'))
+
         # Load scalers
-        scalers['regression'] = joblib.load('regression_scaler.pkl')
-        scalers['classification'] = joblib.load('classification_scaler.pkl')
-        print("✅ Scalers loaded successfully")
-        
+        scalers['regression'] = joblib.load(os.path.join(MODEL_DIR, 'regression_scaler.pkl'))
+        scalers['classification'] = joblib.load(os.path.join(MODEL_DIR, 'classification_scaler.pkl'))
+
         # Load encoders
-        encoders['regression'] = joblib.load('regression_encoders.pkl')
-        encoders['classification'] = joblib.load('classification_encoders.pkl')
-        print("✅ Encoders loaded successfully")
-        
-        # Load feature names
+        encoders['regression'] = joblib.load(os.path.join(MODEL_DIR, 'regression_encoders.pkl'))
+        encoders['classification'] = joblib.load(os.path.join(MODEL_DIR, 'classification_encoders.pkl'))
+
+        # Load feature names (JSON in project root)
         with open('feature_names.json', 'r') as f:
             feature_names = json.load(f)
-        print("✅ Feature names loaded successfully")
-        
-        # Validate the loaded data
-        print(f"Loaded models: {list(models.keys())}")
-        print(f"Loaded scalers: {list(scalers.keys())}")
-        print(f"Loaded encoders: {list(encoders.keys())}")
-        print(f"Loaded feature_names: {list(feature_names.keys())}")
-        
-        print("All models and processors loaded successfully!")
+
+        print("✅ All models and processors loaded successfully!")
         return True
-        
+
     except Exception as e:
-        print(f"Error loading models: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error loading models/processors: {e}")
+        import traceback; traceback.print_exc()
         return False
 
 def preprocess_input_data(data, task_type='regression'):
-    """Preprocess input data with enhanced error handling"""
+    """Preprocess input data same way as training"""
     try:
-        print(f"Preprocessing data for task_type: {task_type}")
-        
-        # Validate that required objects are loaded
+        # Validate that loaders ran
         if not models:
-            raise Exception("Models not loaded. Please check server logs.")
-        
-        if task_type not in encoders:
-            raise Exception(f"No encoders found for task_type: {task_type}. Available: {list(encoders.keys())}")
-        
-        if task_type not in scalers:
-            raise Exception(f"No scalers found for task_type: {task_type}. Available: {list(scalers.keys())}")
-        
-        if task_type not in feature_names:
-            raise Exception(f"No feature_names found for task_type: {task_type}. Available: {list(feature_names.keys())}")
-        
-        # Create DataFrame from input
+            raise Exception("Models not loaded")
+
+        if task_type not in encoders or task_type not in scalers or f"{task_type}_features" not in feature_names:
+            raise Exception(f"Missing encoders/scalers/features for task '{task_type}'")
+
+        # Convert to DataFrame
         df = pd.DataFrame([data])
-        print(f"Input data columns: {list(df.columns)}")
-        
-        # Handle categorical encoding
-        categorical_features = ['Vegetation_Type', 'Soil_Type', 'Country']
-        for feature in categorical_features:
-            if feature in df.columns and feature in encoders[task_type]:
-                encoder = encoders[task_type][feature]
-                # Handle unknown categories by assigning 0
-                df[feature] = df[feature].apply(
+
+        # Encode categorical features
+        for feat in ['Vegetation_Type', 'Soil_Type', 'Country']:
+            if feat in df.columns and feat in encoders[task_type]:
+                encoder = encoders[task_type][feat]
+                df[feat] = df[feat].apply(
                     lambda x: encoder.transform([str(x)])[0] if str(x) in encoder.classes_ else 0
                 )
-                print(f"Encoded feature: {feature}")
-        
-        # Handle boolean column
+
+        # Boolean to int
         if 'Protected_Area_Status' in df.columns:
             df['Protected_Area_Status'] = df['Protected_Area_Status'].astype(int)
-            print("Converted Protected_Area_Status to int")
-        
-        # Select only feature columns needed for the model
-        feature_cols = feature_names[f'{task_type}_features']
-        print(f"Required features: {feature_cols}")
-        
-        # Check if all required features are present
-        missing_features = [col for col in feature_cols if col not in df.columns]
-        if missing_features:
-            raise Exception(f"Missing required features: {missing_features}")
-        
-        df_features = df[feature_cols]
-        
-        # Scale features
-        scaled_features = scalers[task_type].transform(df_features)
-        print(f"Successfully preprocessed data. Shape: {scaled_features.shape}")
-        
-        return scaled_features
-        
+
+        # Select and scale features
+        cols = feature_names[f"{task_type}_features"]
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            raise Exception(f"Missing input features: {missing}")
+        features = df[cols]
+        return scalers[task_type].transform(features)
+
     except Exception as e:
-        print(f"Error in preprocess_input_data: {str(e)}")
-        raise Exception(f"Error preprocessing data: {str(e)}")
+        raise Exception(f"Error preprocessing data: {e}")
 
 @app.route('/')
 def index():
-    """Serve the main page"""
     return render_template('index.html')
 
 @app.route('/static/<path:path>')
 def serve_static(path):
-    """Serve static files"""
     return send_from_directory('static', path)
 
 @app.route('/api/predict', methods=['POST'])
 def predict():
-    """API endpoint for predictions with enhanced error handling"""
     try:
-        print("Received prediction request")
-        
-        # Check if models are loaded
         if not models:
-            return jsonify({
-                'error': 'Models not loaded. Please check server configuration.',
-                'success': False
-            }), 500
-        
-        # Get input data from request
-        input_data = request.json
-        print(f"Input data keys: {list(input_data.keys()) if input_data else 'No data'}")
-        
-        if not input_data:
-            return jsonify({'error': 'No input data provided', 'success': False}), 400
-        
-        # Validate required fields
-        required_fields = [
-            'Latitude', 'Longitude', 'Vegetation_Type', 'Biodiversity_Index',
-            'Protected_Area_Status', 'Elevation_m', 'Slope_Degree', 'Soil_Type',
-            'Air_Quality_Index', 'Average_Temperature_C', 'Tourist_Attractions',
-            'Accessibility_Score', 'Tourist_Capacity_Limit'
+            return jsonify({'error': 'Models not loaded', 'success': False}), 500
+
+        input_data = request.json or {}
+        # Required inputs
+        required = [
+            'Latitude','Longitude','Vegetation_Type','Biodiversity_Index',
+            'Protected_Area_Status','Elevation_m','Slope_Degree','Soil_Type',
+            'Air_Quality_Index','Average_Temperature_C','Tourist_Attractions',
+            'Accessibility_Score','Tourist_Capacity_Limit'
         ]
-        
-        missing_fields = [field for field in required_fields if field not in input_data]
-        if missing_fields:
-            return jsonify({'error': f'Missing required fields: {missing_fields}', 'success': False}), 400
-        
-        # Add default values for fields needed by the model
+        missing = [f for f in required if f not in input_data]
+        if missing:
+            return jsonify({'error': f'Missing fields: {missing}', 'success': False}), 400
+
+        # Defaults
         defaults = {
-            'Country': 'USA',
-            'Flood_Risk_Index': 0.3,
-            'Drought_Risk_Index': 0.3,
-            'Temperature_C': input_data.get('Average_Temperature_C', 20.0),
-            'Annual_Rainfall_mm': 1000.0,
-            'Soil_Erosion_Risk': 0.2,
-            'Current_Tourist_Count': input_data.get('Tourist_Capacity_Limit', 500) * 0.6,
-            'Human_Activity_Index': 0.4,
-            'Conservation_Investment_USD': 100000.0,
-            'Climate_Risk_Score': 0.4
+            'Country':'USA','Flood_Risk_Index':0.3,'Drought_Risk_Index':0.3,
+            'Temperature_C': input_data.get('Average_Temperature_C',20.0),
+            'Annual_Rainfall_mm':1000.0,'Soil_Erosion_Risk':0.2,
+            'Current_Tourist_Count': input_data['Tourist_Capacity_Limit']*0.6,
+            'Human_Activity_Index':0.4,'Conservation_Investment_USD':100000.0,
+            'Climate_Risk_Score':0.4
         }
-        
-        for key, default_value in defaults.items():
-            if key not in input_data:
-                input_data[key] = default_value
-        
-        print("Processing predictions...")
-        
-        # Preprocess data for both models
-        regression_data = preprocess_input_data(input_data, 'regression')
-        classification_data = preprocess_input_data(input_data, 'classification')
-        
-        # Make predictions
-        climate_risk_score = models['regression'].predict(regression_data)[0]
-        flood_risk_prediction = models['classification'].predict(classification_data)[0]
-        flood_risk_proba = models['classification'].predict_proba(classification_data)[0]
-        
-        # Convert predictions to user-friendly format
-        risk_categories = ['Low', 'Medium', 'High']
-        flood_risk_category = risk_categories[flood_risk_prediction] if flood_risk_prediction < len(risk_categories) else 'Unknown'
-        
-        # Create probability distribution
-        risk_probabilities = {
-            risk_categories[i]: float(flood_risk_proba[i]) if i < len(flood_risk_proba) else 0.0
-            for i in range(len(risk_categories))
-        }
-        
-        results = {
+        for k,v in defaults.items():
+            input_data.setdefault(k,v)
+
+        reg_X = preprocess_input_data(input_data, 'regression')
+        cls_X = preprocess_input_data(input_data, 'classification')
+
+        score = models['regression'].predict(reg_X)[0]
+        cls = models['classification'].predict(cls_X)[0]
+        proba = models['classification'].predict_proba(cls_X)[0]
+
+        cats = ['Low','Medium','High']
+        flood_cat = cats[cls] if cls < len(cats) else 'Unknown'
+        probs = {cats[i]: float(proba[i]) for i in range(len(cats))}
+
+        result = {
             'success': True,
-            'climate_risk_score': float(climate_risk_score),
-            'flood_risk_category': flood_risk_category,
-            'risk_probabilities': risk_probabilities,
-            'risk_level': 'Low' if climate_risk_score < 0.33 else 'Medium' if climate_risk_score < 0.67 else 'High'
+            'climate_risk_score': float(score),
+            'flood_risk_category': flood_cat,
+            'risk_probabilities': probs,
+            'risk_level': 'Low' if score<0.33 else 'Medium' if score<0.67 else 'High'
         }
-        
-        print(f"Prediction successful: {results['risk_level']}")
-        return jsonify(results)
-        
+        return jsonify(result)
+
     except Exception as e:
-        print(f"Error in predict endpoint: {str(e)}")
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': str(e), 'success': False}), 500
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Enhanced health check endpoint"""
-    try:
-        # Check what's actually loaded
-        models_status = {
-            'loaded': len(models) > 0,
-            'available': list(models.keys()),
-            'count': len(models)
-        }
-        
-        encoders_status = {
-            'loaded': len(encoders) > 0,
-            'available': list(encoders.keys()),
-            'count': len(encoders)
-        }
-        
-        scalers_status = {
-            'loaded': len(scalers) > 0,
-            'available': list(scalers.keys()),
-            'count': len(scalers)
-        }
-        
-        feature_names_status = {
-            'loaded': len(feature_names) > 0,
-            'available': list(feature_names.keys()),
-            'count': len(feature_names)
-        }
-        
-        # Check file existence
-        model_files = [
-            'best_regression_model_linear.pkl',
-            'best_classification_model_logistic.pkl',
-            'regression_scaler.pkl',
-            'classification_scaler.pkl',
-            'regression_encoders.pkl',
-            'classification_encoders.pkl',
-            'feature_names.json'
-        ]
-        
-        file_status = {file: os.path.exists(file) for file in model_files}
-        
-        overall_status = 'healthy' if all([
-            len(models) > 0,
-            len(encoders) > 0,
-            len(scalers) > 0,
-            len(feature_names) > 0
-        ]) else 'unhealthy'
-        
-        return jsonify({
-            'status': overall_status,
-            'platform': 'Render.com',
-            'models': models_status,
-            'encoders': encoders_status,
-            'scalers': scalers_status,
-            'feature_names': feature_names_status,
-            'files': file_status,
-            'debug': {
-                'cwd': os.getcwd(),
-                'all_files': os.listdir('.') if os.path.exists('.') else []
-            }
-        })
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'error': str(e),
-            'platform': 'Render.com'
-        }), 500
+    status = 'healthy' if models and encoders and scalers and feature_names else 'unhealthy'
+    return jsonify({
+        'status': status,
+        'models_loaded': bool(models),
+        'available_models': list(models.keys()),
+        'encoders_loaded': bool(encoders),
+        'available_encoders': list(encoders.keys()),
+        'scalers_loaded': bool(scalers),
+        'available_scalers': list(scalers.keys()),
+        'feature_names_loaded': bool(feature_names),
+        'available_feature_sets': list(feature_names.keys())
+    })
 
-# Error handlers
 @app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'Endpoint not found'}), 404
+def not_found(e):
+    return jsonify({'error':'Endpoint not found'}), 404
 
 @app.errorhandler(500)
-def internal_error(error):
-    return jsonify({'error': 'Internal server error'}), 500
+def internal_error(e):
+    return jsonify({'error':'Internal server error'}), 500
 
 if __name__ == '__main__':
-    print("Starting Eco-Tourism Climate Risk Prediction API...")
-    print("Platform: Render.com")
-    print("=" * 50)
-    
-    # Try to load models
-    models_loaded = load_models_and_processors()
-    if not models_loaded:
-        print("❌ WARNING: Models not loaded. Some functionality may not work.")
-        print("Please ensure all .pkl model files are present in the repository.")
-    else:
-        print("✅ All models loaded successfully!")
-    
-    # Get port from environment variable (Render provides this)
+    print("Starting API on Render.com...")
+    loaded = load_models_and_processors()
+    if not loaded:
+        print("WARNING: Models/processors failed to load.")
     port = int(os.environ.get('PORT', 10000))
-    debug_mode = os.environ.get('FLASK_ENV') == 'development'
-    
-    print(f"Server starting on port {port}")
-    print(f"Debug mode: {debug_mode}")
-    print("=" * 50)
-    
-    # For production deployment on Render
-    app.run(debug=debug_mode, host='0.0.0.0', port=port)
+    debug = os.environ.get('FLASK_ENV')=='development'
+    app.run(host='0.0.0.0', port=port, debug=debug)
